@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>極限打蒼蠅大作戰 - Fly Swatter Master</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        arcade: {
+                            bg: '#0f172a',
+                            card: '#1e293b',
+                            accent: '#f59e0b',
+                            danger: '#ef4444',
+                            success: '#10b981',
+                            gold: '#fbbf24'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        /* 全局打擊拍子鼠標 */
+        .game-area-cursor {
+            cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' fill='%23f59e0b'><path d='M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z'/></svg>") 24 24, auto;
+        }
+
+        /* 蒼蠅拍點擊揮拍動畫 */
+        .swatter-swung {
+            animation: swing 0.12s ease-in-out;
+        }
+
+        @keyframes swing {
+            0% { transform: scale(1) rotate(0deg); }
+            50% { transform: scale(0.85) rotate(-20deg); }
+            100% { transform: scale(1) rotate(0deg); }
+        }
+
+        /* 被打中時立刻拍扁消失動畫 */
+        .hit-squish {
+            transform: scale(1.4, 0.2) rotate(15deg) !important;
+            opacity: 0 !important;
+            transition: transform 0.08s ease-out, opacity 0.08s ease-out !important;
+            pointer-events: none !important;
+        }
+
+        /* 浮動得分動畫 */
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -90px) scale(1.3); }
+        }
+
+        .floating-score {
+            position: absolute;
+            pointer-events: none;
+            animation: floatUp 0.7s ease-out forwards;
+            font-weight: 900;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.9);
+            z-index: 50;
+        }
+
+        /* 打擊血印 / 拍打特效 */
+        @keyframes splatFade {
+            0% { opacity: 1; transform: translate(-50%, -50%) scale(0.6) rotate(0deg); }
+            50% { opacity: 0.9; transform: translate(-50%, -50%) scale(1.2) rotate(15deg); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(1.4) rotate(20deg); }
+        }
+
+        .splat-effect {
+            position: absolute;
+            pointer-events: none;
+            animation: splatFade 0.8s ease-out forwards;
+            z-index: 20;
+        }
+
+        /* 昆蟲揮翅嗡嗡搖擺 */
+        @keyframes flyBuzz {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            25% { transform: translate(3px, -4px) rotate(6deg); }
+            50% { transform: translate(-3px, 2px) rotate(-6deg); }
+            75% { transform: translate(2px, 3px) rotate(3deg); }
+        }
+
+        .insect-buzz {
+            animation: flyBuzz 0.12s infinite alternate ease-in-out;
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-arcade-bg text-slate-100 font-sans min-h-screen flex flex-col justify-between select-none overflow-x-hidden">
+
+    <!-- 頂部導覽列與 HUD -->
+    <header class="w-full bg-slate-900/80 backdrop-blur border-b border-slate-800 p-4 sticky top-0 z-40">
+        <div class="max-w-6xl mx-auto flex flex-wrap justify-between items-center gap-4">
+            <!-- 標題 -->
+            <div class="flex items-center space-x-3">
+                <div class="bg-amber-500 text-slate-900 p-2.5 rounded-xl text-2xl font-black shadow-lg shadow-amber-500/20">
+                    <i class="fa-solid fa-mosquito"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
+                        極限打蒼蠅大作戰
+                    </h1>
+                    <p class="text-xs text-slate-400">Fly Swatter Challenge</p>
+                </div>
+            </div>
+
+            <!-- HUD 數據看板 -->
+            <div class="flex items-center gap-3 sm:gap-6 bg-slate-800/80 px-4 py-2 rounded-xl border border-slate-700/60 shadow-inner">
+                <!-- 時間 -->
+                <div class="text-center min-w-[60px]">
+                    <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">剩餘時間</div>
+                    <div id="timerDisplay" class="text-2xl font-black text-amber-400 font-mono">30s</div>
+                </div>
+
+                <div class="h-8 w-[1px] bg-slate-700"></div>
+
+                <!-- 當前分數 -->
+                <div class="text-center min-w-[70px]">
+                    <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">當前分數</div>
+                    <div id="scoreDisplay" class="text-2xl font-black text-white font-mono">0</div>
+                </div>
+
+                <div class="h-8 w-[1px] bg-slate-700"></div>
+
+                <!-- 連擊 Combo -->
+                <div class="text-center min-w-[60px]">
+                    <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">COMBO</div>
+                    <div id="comboDisplay" class="text-2xl font-black text-rose-500 font-mono">x0</div>
+                </div>
+
+                <div class="h-8 w-[1px] bg-slate-700"></div>
+
+                <!-- 最高分數 -->
+                <div class="text-center min-w-[70px]">
+                    <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">歷史最高</div>
+                    <div id="highScoreDisplay" class="text-2xl font-black text-emerald-400 font-mono">0</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主要內容區域 -->
+    <main class="max-w-6xl w-full mx-auto p-4 flex-1 flex flex-col md:flex-row gap-6 items-stretch my-2">
+        
+        <!-- 左側：遊戲說明 -->
+        <aside class="w-full md:w-80 bg-arcade-card/80 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between shadow-xl">
+            <div>
+                <h2 class="text-lg font-bold text-slate-200 mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-circle-info text-amber-400"></i> 遊戲規則與圖鑑
+                </h2>
+
+                <div class="space-y-3">
+                    <!-- 普通蒼蠅 -->
+                    <div class="flex items-center justify-between p-3 bg-slate-900/60 rounded-xl border border-slate-800">
+                        <div class="flex items-center gap-3">
+                            <span class="text-2xl">🪰</span>
+                            <div>
+                                <div class="text-sm font-semibold text-slate-200">普通蒼蠅</div>
+                                <div class="text-xs text-slate-400">打中立刻消失</div>
+                            </div>
+                        </div>
+                        <span class="text-emerald-400 font-bold font-mono text-sm">+10 分</span>
+                    </div>
+
+                    <!-- 金蒼蠅 -->
+                    <div class="flex items-center justify-between p-3 bg-slate-900/60 rounded-xl border border-amber-500/30">
+                        <div class="flex items-center gap-3">
+                            <span class="text-2xl">🪲</span>
+                            <div>
+                                <div class="text-sm font-semibold text-amber-300">黃金急速蠅</div>
+                                <div class="text-xs text-slate-400">極速移動，高分回報</div>
+                            </div>
+                        </div>
+                        <span class="text-amber-400 font-bold font-mono text-sm">+30 分</span>
+                    </div>
+
+                    <!-- 毒蜂/炸彈 -->
+                    <div class="flex items-center justify-between p-3 bg-slate-900/60 rounded-xl border border-rose-500/30">
+                        <div class="flex items-center gap-3">
+                            <span class="text-2xl">🐝</span>
+                            <div>
+                                <div class="text-sm font-semibold text-rose-400">毒蜂警告</div>
+                                <div class="text-xs text-slate-400">請勿擊打！會扣時間分數</div>
+                            </div>
+                        </div>
+                        <span class="text-rose-400 font-bold font-mono text-sm">-20分 / -3秒</span>
+                    </div>
+                </div>
+
+                <div class="mt-6 p-4 bg-slate-900/40 rounded-xl border border-slate-800 text-xs text-slate-400 space-y-2">
+                    <div class="font-semibold text-slate-300 flex items-center gap-1">
+                        <i class="fa-solid fa-bolt text-amber-400"></i> 操作與 Combo 機制：
+                    </div>
+                    <p>• 點擊畫面中的昆蟲，打中會播放拍扁特效並立刻消失。</p>
+                    <p>• 連續打中可累積 Combo，得分大幅翻倍！</p>
+                    <p>• 沒打中昆蟲（點空）會重置 Combo 計數。</p>
+                </div>
+            </div>
+
+            <!-- 控制按鈕 -->
+            <div class="mt-6 space-y-2">
+                <button id="startBtn" class="w-full py-3.5 px-4 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black rounded-xl shadow-lg shadow-amber-500/25 transition duration-200 active:scale-95 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-play text-lg"></i> 開始遊戲
+                </button>
+                <button id="resetRecordsBtn" class="w-full py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-xs font-medium rounded-lg transition duration-200 flex items-center justify-center gap-1.5 border border-slate-700">
+                    <i class="fa-solid fa-rotate-right"></i> 重置最高紀錄
+                </button>
+            </div>
+        </aside>
+
+        <!-- 右側：遊戲主畫布 -->
+        <section class="flex-1 min-h-[420px] md:min-h-[520px] bg-slate-900 rounded-2xl border-2 border-slate-800 relative overflow-hidden shadow-2xl flex flex-col justify-center items-center" id="gameBoundary">
+            
+            <!-- 背景網格 -->
+            <div class="absolute inset-0 bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:24px_24px] opacity-40 pointer-events-none"></div>
+
+            <!-- 實際互動區域 (事件代理) -->
+            <div id="gameArea" class="absolute inset-0 game-area-cursor overflow-hidden">
+                <!-- 蒼蠅動態生成 -->
+            </div>
+
+            <!-- 開始/覆蓋面板 -->
+            <div id="overlayPanel" class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center z-30 transition-all duration-300">
+                <div class="w-20 h-20 bg-amber-500/10 rounded-full border border-amber-500/30 flex items-center justify-center mb-4 text-4xl text-amber-400 animate-pulse">
+                    <i class="fa-solid fa-hand-pointer"></i>
+                </div>
+                <h3 id="overlayTitle" class="text-2xl font-black text-white mb-2">準備好擊退蒼蠅了嗎？</h3>
+                <p id="overlayDesc" class="text-slate-400 text-sm max-w-md mb-6">點擊「開始遊戲」挑戰 30 秒打蒼蠅！打中立刻消滅！</p>
+                <button id="overlayStartBtn" class="py-3 px-8 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl shadow-lg shadow-amber-500/20 transition duration-150 active:scale-95">
+                    立即開始
+                </button>
+            </div>
+
+            <!-- 自動暫停提示 -->
+            <div id="pauseBanner" class="hidden absolute inset-0 bg-slate-950/90 backdrop-blur-md z-30 flex flex-col items-center justify-center p-6 text-center">
+                <i class="fa-solid fa-circle-pause text-5xl text-amber-400 mb-3"></i>
+                <h3 class="text-2xl font-bold text-white mb-2">遊戲已暫停</h3>
+                <p class="text-slate-400 text-sm mb-6">檢測到頁面失去焦點，已自動暫停。</p>
+                <button id="resumeBtn" class="py-2.5 px-6 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl border border-slate-700 transition">
+                    繼續遊戲
+                </button>
+            </div>
+        </section>
+    </main>
+
+    <!-- 結算 Modal -->
+    <div id="gameOverModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-all duration-300">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl transform scale-95 transition-all duration-300" id="modalCard">
+            <div class="text-center mb-6">
+                <div id="modalBadge" class="inline-block px-3 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 font-semibold text-xs rounded-full mb-2">
+                    時間到！
+                </div>
+                <h2 class="text-2xl font-black text-white">遊戲結算</h2>
+            </div>
+
+            <div class="bg-slate-800/60 rounded-xl p-4 border border-slate-700/60 text-center mb-6">
+                <div class="text-xs text-slate-400 font-semibold uppercase mb-1">本次得分</div>
+                <div id="finalScore" class="text-5xl font-black text-amber-400 font-mono mb-2">0</div>
+                <div id="newHighNotice" class="hidden text-xs text-emerald-400 font-bold animate-bounce">
+                    🎉 恭喜破紀錄！成功寫入最高紀錄！
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex justify-between items-center">
+                    <span>🏆 歷史排行榜 (Top 5)</span>
+                    <span class="text-[10px] text-slate-500">Hash 保護中</span>
+                </h4>
+                <div id="leaderboardList" class="space-y-1.5 max-h-36 overflow-y-auto no-scrollbar">
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <button id="modalRestartBtn" class="flex-1 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl shadow-lg shadow-amber-500/20 transition active:scale-95">
+                    再玩一次
+                </button>
+                <button id="modalCloseBtn" class="py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl border border-slate-700 transition">
+                    關閉
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="w-full text-center py-4 border-t border-slate-800/80 text-xs text-slate-500">
+        Fly Swatter Game &copy; 2026 - 現代化 HTML5 遊戲實作
+    </footer>
+
+    <script>
+        /**
+         * Web Audio API 音效組件
+         */
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContext) {
+                        this.ctx = new AudioContext();
+                    }
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            playHit() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(320, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(70, this.ctx.currentTime + 0.08);
+
+                gain.gain.setValueAtTime(0.35, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.08);
+            }
+
+            playBomb() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(160, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(40, this.ctx.currentTime + 0.25);
+
+                gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.25);
+            }
+
+            playGameOver() {
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.setValueAtTime(300, now + 0.1);
+                osc.frequency.setValueAtTime(200, now + 0.2);
+
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.35);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start();
+                osc.stop(now + 0.35);
+            }
+        }
+
+        /**
+         * localStorage 加密與防竄改管理器
+         */
+        class StorageManager {
+            constructor(secretKey = 'FLYSWATTER_SECURE_KEY') {
+                this.STORAGE_KEY = 'fly_swatter_leaderboard_v1';
+                this.secretKey = secretKey;
+            }
+
+            _generateHash(dataStr) {
+                let hash = 0;
+                const combined = dataStr + this.secretKey;
+                for (let i = 0; i < combined.length; i++) {
+                    const char = combined.charCodeAt(i);
+                    hash = ((hash << 5) - hash) + char;
+                    hash |= 0;
+                }
+                return hash.toString(16);
+            }
+
+            getLeaderboard() {
+                try {
+                    const rawData = localStorage.getItem(this.STORAGE_KEY);
+                    if (!rawData) return [];
+
+                    const parsed = JSON.parse(rawData);
+                    if (!parsed || !Array.isArray(parsed.data) || !parsed.hash) {
+                        throw new Error('Format corrupted');
+                    }
+
+                    const expectedHash = this._generateHash(JSON.stringify(parsed.data));
+                    if (parsed.hash !== expectedHash) {
+                        console.warn('Tampered storage detected. Resetting.');
+                        this.clearStorage();
+                        return [];
+                    }
+
+                    return parsed.data.filter(item => typeof item.score === 'number' && !isNaN(item.score));
+                } catch (e) {
+                    this.clearStorage();
+                    return [];
+                }
+            }
+
+            saveScore(score) {
+                if (typeof score !== 'number' || isNaN(score) || score <= 0) return false;
+
+                const currentList = this.getLeaderboard();
+                const newEntry = {
+                    score: Math.floor(score),
+                    date: new Date().toLocaleDateString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+                };
+
+                currentList.push(newEntry);
+                currentList.sort((a, b) => b.score - a.score);
+                const top5 = currentList.slice(0, 5);
+
+                const payloadStr = JSON.stringify(top5);
+                const hash = this._generateHash(payloadStr);
+
+                try {
+                    localStorage.setItem(this.STORAGE_KEY, JSON.stringify({
+                        data: top5,
+                        hash: hash
+                    }));
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            }
+
+            getHighScore() {
+                const list = this.getLeaderboard();
+                return list.length > 0 ? list[0].score : 0;
+            }
+
+            clearStorage() {
+                try {
+                    localStorage.removeItem(this.STORAGE_KEY);
+                } catch (e) {}
+            }
+        }
+
+        /**
+         * 遊戲引擎與控制系統
+         */
+        class FlySwatterGame {
+            constructor() {
+                this.gameArea = document.getElementById('gameArea');
+                this.gameBoundary = document.getElementById('gameBoundary');
+                this.timerDisplay = document.getElementById('timerDisplay');
+                this.scoreDisplay = document.getElementById('scoreDisplay');
+                this.comboDisplay = document.getElementById('comboDisplay');
+                this.highScoreDisplay = document.getElementById('highScoreDisplay');
+                
+                this.overlayPanel = document.getElementById('overlayPanel');
+                this.overlayTitle = document.getElementById('overlayTitle');
+                this.overlayDesc = document.getElementById('overlayDesc');
+                this.pauseBanner = document.getElementById('pauseBanner');
+                
+                this.startBtn = document.getElementById('startBtn');
+                this.overlayStartBtn = document.getElementById('overlayStartBtn');
+                this.resetRecordsBtn = document.getElementById('resetRecordsBtn');
+                this.resumeBtn = document.getElementById('resumeBtn');
+
+                this.modal = document.getElementById('gameOverModal');
+                this.modalCard = document.getElementById('modalCard');
+                this.finalScore = document.getElementById('finalScore');
+                this.newHighNotice = document.getElementById('newHighNotice');
+                this.leaderboardList = document.getElementById('leaderboardList');
+                this.modalRestartBtn = document.getElementById('modalRestartBtn');
+                this.modalCloseBtn = document.getElementById('modalCloseBtn');
+
+                this.storage = new StorageManager();
+                this.sound = new SoundFX();
+
+                this.isPlaying = false;
+                this.isPaused = false;
+                this.score = 0;
+                this.combo = 0;
+                this.timeRemaining = 30;
+                
+                this.gameLoopId = null;
+                this.lastSpawnTime = 0;
+                this.spawnInterval = 650;
+                this.lastTimerUpdate = 0;
+
+                this.insects = [];
+
+                this.init();
+            }
+
+            init() {
+                this.updateHighScoreDisplay();
+
+                this.startBtn.addEventListener('click', () => this.startGame());
+                this.overlayStartBtn.addEventListener('click', () => this.startGame());
+                this.modalRestartBtn.addEventListener('click', () => {
+                    this.hideGameOverModal();
+                    this.startGame();
+                });
+                this.modalCloseBtn.addEventListener('click', () => this.hideGameOverModal());
+                this.resetRecordsBtn.addEventListener('click', () => this.resetRecords());
+                this.resumeBtn.addEventListener('click', () => this.resumeGame());
+
+                // 事件代理：點擊點擊事件
+                this.gameArea.addEventListener('click', (e) => this.handleGameClick(e));
+
+                // 視窗失去焦點自動暫停防護
+                document.addEventListener('visibilitychange', () => {
+                    if (document.hidden && this.isPlaying && !this.isPaused) {
+                        this.pauseGame();
+                    }
+                });
+                window.addEventListener('blur', () => {
+                    if (this.isPlaying && !this.isPaused) {
+                        this.pauseGame();
+                    }
+                });
+            }
+
+            updateHighScoreDisplay() {
+                const highScore = this.storage.getHighScore();
+                this.highScoreDisplay.textContent = highScore;
+            }
+
+            resetRecords() {
+                if (confirm('確定要清空所有歷史最高紀錄嗎？')) {
+                    this.storage.clearStorage();
+                    this.updateHighScoreDisplay();
+                    alert('紀錄已成功重置！');
+                }
+            }
+
+            startGame() {
+                this.sound.init();
+                
+                this.score = 0;
+                this.combo = 0;
+                this.timeRemaining = 30;
+                this.isPlaying = true;
+                this.isPaused = false;
+                this.insects = [];
+
+                this.gameArea.innerHTML = '';
+                this.overlayPanel.classList.add('opacity-0', 'pointer-events-none');
+                this.pauseBanner.classList.add('hidden');
+
+                this.updateHUD();
+
+                const now = performance.now();
+                this.lastSpawnTime = now;
+                this.lastTimerUpdate = now;
+                
+                if (this.gameLoopId) cancelAnimationFrame(this.gameLoopId);
+                this.gameLoopId = requestAnimationFrame((timestamp) => this.gameLoop(timestamp));
+            }
+
+            pauseGame() {
+                if (!this.isPlaying || this.isPaused) return;
+                this.isPaused = true;
+                this.pauseBanner.classList.remove('hidden');
+            }
+
+            resumeGame() {
+                if (!this.isPlaying || !this.isPaused) return;
+                this.isPaused = false;
+                this.pauseBanner.classList.add('hidden');
+                
+                const now = performance.now();
+                this.lastSpawnTime = now;
+                this.lastTimerUpdate = now;
+                this.gameLoopId = requestAnimationFrame((timestamp) => this.gameLoop(timestamp));
+            }
+
+            endGame() {
+                this.isPlaying = false;
+                if (this.gameLoopId) cancelAnimationFrame(this.gameLoopId);
+
+                this.sound.playGameOver();
+
+                const isNewHigh = this.score > 0 && this.score > this.storage.getHighScore();
+                this.storage.saveScore(this.score);
+                this.updateHighScoreDisplay();
+
+                this.showGameOverModal(isNewHigh);
+            }
+
+            gameLoop(timestamp) {
+                if (!this.isPlaying || this.isPaused) return;
+
+                // 1 秒倒數計時
+                if (timestamp - this.lastTimerUpdate >= 1000) {
+                    this.timeRemaining--;
+                    this.timerDisplay.textContent = `${this.timeRemaining}s`;
+                    this.lastTimerUpdate = timestamp;
+
+                    if (this.timeRemaining <= 0) {
+                        this.endGame();
+                        return;
+                    }
+                }
+
+                // 昆蟲動態生成
+                const currentInterval = Math.max(320, this.spawnInterval - Math.floor(this.score / 50) * 30);
+                if (timestamp - this.lastSpawnTime >= currentInterval) {
+                    if (this.insects.length < 12) {
+                        this.spawnInsect();
+                    }
+                    this.lastSpawnTime = timestamp;
+                }
+
+                // 更新座標
+                this.updateInsects();
+
+                this.gameLoopId = requestAnimationFrame((ts) => this.gameLoop(ts));
+            }
+
+            spawnInsect() {
+                const rect = this.gameArea.getBoundingClientRect();
+                const size = 52; // 放大點擊 Hitbox，增加手感
+
+                const x = Math.random() * (rect.width - size - 10) + 5;
+                const y = Math.random() * (rect.height - size - 10) + 5;
+
+                const rand = Math.random();
+                let type = 'fly';
+                let emoji = '🪰';
+                let speed = 1.6 + Math.random() * 1.6;
+
+                if (rand > 0.82) {
+                    type = 'golden';
+                    emoji = '🪲';
+                    speed = 3.8 + Math.random() * 2.2;
+                } else if (rand > 0.68) {
+                    type = 'bee';
+                    emoji = '🐝';
+                    speed = 2.2 + Math.random() * 1.6;
+                }
+
+                const angle = Math.random() * Math.PI * 2;
+                const vx = Math.cos(angle) * speed;
+                const vy = Math.sin(angle) * speed;
+
+                const el = document.createElement('div');
+                el.className = 'absolute insect-buzz select-none pointer-events-auto flex items-center justify-center cursor-pointer';
+                el.style.width = `${size}px`;
+                el.style.height = `${size}px`;
+                el.style.left = `${x}px`;
+                el.style.top = `${y}px`;
+                el.style.fontSize = '2.2rem';
+                
+                // 內部 Emoji 設為 pointer-events-none，防止多層事件誤判
+                el.innerHTML = `<span class="pointer-events-none">${emoji}</span>`;
+
+                const id = Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+                el.dataset.id = id;
+                el.dataset.type = type;
+
+                this.gameArea.appendChild(el);
+
+                this.insects.push({
+                    id: id,
+                    type: type,
+                    el: el,
+                    x: x,
+                    y: y,
+                    vx: vx,
+                    vy: vy,
+                    width: size,
+                    height: size,
+                    isHit: false,
+                    changeDirTimer: 0
+                });
+            }
+
+            updateInsects() {
+                const rect = this.gameArea.getBoundingClientRect();
+
+                for (let i = this.insects.length - 1; i >= 0; i--) {
+                    const insect = this.insects[i];
+                    if (insect.isHit) continue; // 已被打中的昆蟲停止移動
+
+                    insect.changeDirTimer++;
+                    if (insect.changeDirTimer > 50 + Math.random() * 50) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const speed = Math.hypot(insect.vx, insect.vy);
+                        insect.vx = Math.cos(angle) * speed;
+                        insect.vy = Math.sin(angle) * speed;
+                        insect.changeDirTimer = 0;
+                    }
+
+                    insect.x += insect.vx;
+                    insect.y += insect.vy;
+
+                    if (insect.x <= 0 || insect.x >= rect.width - insect.width) {
+                        insect.vx *= -1;
+                        insect.x = Math.max(0, Math.min(insect.x, rect.width - insect.width));
+                    }
+                    if (insect.y <= 0 || insect.y >= rect.height - insect.height) {
+                        insect.vy *= -1;
+                        insect.y = Math.max(0, Math.min(insect.y, rect.height - insect.height));
+                    }
+
+                    insect.el.style.left = `${insect.x}px`;
+                    insect.el.style.top = `${insect.y}px`;
+                }
+            }
+
+            // 處理點擊事件
+            handleGameClick(e) {
+                if (!this.isPlaying || this.isPaused) return;
+
+                // 揮拍動畫
+                this.gameArea.classList.remove('swatter-swung');
+                void this.gameArea.offsetWidth;
+                this.gameArea.classList.add('swatter-swung');
+
+                const targetInsectEl = e.target.closest('[data-type]');
+                const clickX = e.clientX - this.gameArea.getBoundingClientRect().left;
+                const clickY = e.clientY - this.gameArea.getBoundingClientRect().top;
+
+                if (targetInsectEl && !targetInsectEl.dataset.hit) {
+                    const type = targetInsectEl.dataset.type;
+                    const id = targetInsectEl.dataset.id;
+
+                    // 標記已擊中，防止二次點擊
+                    targetInsectEl.dataset.hit = "true";
+                    this.processHit(id, type, targetInsectEl, clickX, clickY);
+                } else if (!targetInsectEl) {
+                    // Miss 點空
+                    if (this.combo > 0) {
+                        this.combo = 0;
+                        this.updateHUD();
+                        this.showFloatingText(clickX, clickY, 'MISS!', 'text-slate-400');
+                    }
+                }
+            }
+
+            processHit(id, type, targetEl, x, y) {
+                // 1. 立刻套用被打扁視覺動畫
+                targetEl.classList.remove('insect-buzz');
+                targetEl.classList.add('hit-squish');
+
+                // 2. 由資料陣列中搜尋並標記
+                const index = this.insects.findIndex(item => item.id === id);
+                if (index !== -1) {
+                    this.insects[index].isHit = true;
+                    this.insects.splice(index, 1);
+                }
+
+                // 3. 延遲 80ms 後完全移除 DOM (搭配極速淡出動畫)
+                setTimeout(() => {
+                    if (targetEl && targetEl.parentNode) {
+                        targetEl.parentNode.removeChild(targetEl);
+                    }
+                }, 80);
+
+                // 4. 計算得分與音效
+                let scoreDelta = 0;
+                let text = '';
+                let textColor = 'text-emerald-400';
+
+                if (type === 'fly') {
+                    this.combo++;
+                    const multiplier = 1 + Math.floor(this.combo / 5) * 0.5;
+                    scoreDelta = Math.round(10 * multiplier);
+                    text = `+${scoreDelta}`;
+                    this.sound.playHit();
+                    this.createSplatEffect(x, y, '🟢');
+                } else if (type === 'golden') {
+                    this.combo += 2;
+                    const multiplier = 1 + Math.floor(this.combo / 5) * 0.5;
+                    scoreDelta = Math.round(30 * multiplier);
+                    text = `GOLD! +${scoreDelta}`;
+                    textColor = 'text-amber-300';
+                    this.sound.playHit();
+                    this.createSplatEffect(x, y, '🟡');
+                } else if (type === 'bee') {
+                    this.combo = 0;
+                    scoreDelta = -20;
+                    this.timeRemaining = Math.max(0, this.timeRemaining - 3);
+                    this.timerDisplay.textContent = `${this.timeRemaining}s`;
+                    text = `-20分 -3s`;
+                    textColor = 'text-rose-500';
+                    this.sound.playBomb();
+                    this.createSplatEffect(x, y, '💥');
+                }
+
+                this.score = Math.max(0, this.score + scoreDelta);
+                this.updateHUD();
+
+                this.showFloatingText(x, y, text, textColor);
+            }
+
+            createSplatEffect(x, y, symbol) {
+                const splat = document.createElement('div');
+                splat.className = 'splat-effect text-2xl select-none';
+                splat.style.left = `${x}px`;
+                splat.style.top = `${y}px`;
+                splat.textContent = symbol;
+
+                this.gameArea.appendChild(splat);
+                setTimeout(() => {
+                    if (splat.parentNode) splat.parentNode.removeChild(splat);
+                }, 800);
+            }
+
+            showFloatingText(x, y, text, colorClass) {
+                const floatEl = document.createElement('div');
+                floatEl.className = `floating-score ${colorClass} text-xl font-black font-mono`;
+                floatEl.style.left = `${x}px`;
+                floatEl.style.top = `${y}px`;
+                floatEl.textContent = text;
+
+                this.gameArea.appendChild(floatEl);
+                setTimeout(() => {
+                    if (floatEl.parentNode) floatEl.parentNode.removeChild(floatEl);
+                }, 700);
+            }
+
+            updateHUD() {
+                this.scoreDisplay.textContent = this.score;
+                this.comboDisplay.textContent = `x${this.combo}`;
+            }
+
+            showGameOverModal(isNewHigh) {
+                this.finalScore.textContent = this.score;
+
+                if (isNewHigh) {
+                    this.newHighNotice.classList.remove('hidden');
+                } else {
+                    this.newHighNotice.classList.add('hidden');
+                }
+
+                const leaderboard = this.storage.getLeaderboard();
+                this.leaderboardList.innerHTML = '';
+
+                if (leaderboard.length === 0) {
+                    this.leaderboardList.innerHTML = `<div class="text-xs text-slate-500 text-center py-2">尚無歷史紀錄</div>`;
+                } else {
+                    leaderboard.forEach((item, idx) => {
+                        const row = document.createElement('div');
+                        row.className = `flex justify-between items-center p-2 rounded-lg text-xs ${idx === 0 ? 'bg-amber-500/10 border border-amber-500/30 text-amber-300' : 'bg-slate-800/40 text-slate-300'}`;
+                        row.innerHTML = `
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold w-4 ${idx === 0 ? 'text-amber-400' : 'text-slate-500'}">#${idx + 1}</span>
+                                <span class="font-mono text-slate-400">${item.date}</span>
+                            </div>
+                            <span class="font-mono font-bold">${item.score} 分</span>
+                        `;
+                        this.leaderboardList.appendChild(row);
+                    });
+                }
+
+                this.modal.classList.remove('opacity-0', 'pointer-events-none');
+                this.modalCard.classList.remove('scale-95');
+                this.modalCard.classList.add('scale-100');
+            }
+
+            hideGameOverModal() {
+                this.modal.classList.add('opacity-0', 'pointer-events-none');
+                this.modalCard.classList.remove('scale-100');
+                this.modalCard.classList.add('scale-95');
+                
+                this.overlayTitle.textContent = "再次挑戰？";
+                this.overlayDesc.textContent = "點擊下方按鈕開始新一輪打蒼蠅挑戰！";
+                this.overlayPanel.classList.remove('opacity-0', 'pointer-events-none');
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            window.gameInstance = new FlySwatterGame();
+        });
+    </script>
+</body>
+</html>
